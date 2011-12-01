@@ -1,4 +1,30 @@
 <?php
+
+/*
+* installs wordpress from wordpress.org.
+*/
+
+$wp_url = 'http://wordpress.org/latest.zip';
+
+
+$plugins_list=array();
+$plugins_list[]=array('title','url');
+
+$template_list=array();
+$template_list[]=array('title','url');
+
+$admin_user='wpoet';
+$admin_pass='wordpressexperts';
+$sitename='WPoets Demo Setup';
+$public =1;
+
+define('ABSPATH',  dirname(__FILE__).'/');
+$path_part = pathinfo(__FILE__);
+$current_filename=$path_part['filename'];
+
+
+
+//=========== DO NOT EDIT BELOW THIS LINE UNLESS YOU KNOW WHAT YOU ARE DOING ==========
 // --------------------------------------------------------------------------------
 // PhpConcept Library - Zip Module 2.8.2
 // --------------------------------------------------------------------------------
@@ -5741,24 +5767,6 @@ function unzip($file, $dir)
         }
 }
 
-/*
-* installs wordpress from wordpress.org.
-*/
-
-$wp_url = 'http://wordpress.org/latest.zip';
-
-
-$plugins_list=array();
-$plugins_list[]=array('title','url');
-
-$template_list=array();
-$template_list[]=array('title','url');
-
-
-define('ABSPATH',  dirname(__FILE__).'/');
-$path_part = pathinfo(__FILE__);
-$current_filename=$path_part['filename'];
-
 //
 if (isset($_GET['step']))
 	$step = $_GET['step'];
@@ -5810,9 +5818,6 @@ switch($step) {
 		$dbhost  = trim($_POST['dbhost']);
 		$prefix  = trim($_POST['prefix']);
 		$admin_email = trim($_POST['admin_email']);
-		$admin_user='wpoet';
-		$admin_pass='wordpressexperts';
-		$sitename='WPoets Demo Setup';
 		
 		if (empty($prefix)) $prefix = 'wp_';
 		$creat_wp=true;
@@ -5820,20 +5825,21 @@ switch($step) {
 		file_put_contents('wp.zip', file_get_contents($wp_url));
 		unzip('wp.zip',dirname(__FILE__));
 		//move core wordpress to root from wordpress dir
-		echo 'moving files';
+		echo "<ul>";
+		echo '<li> moving WP files </li>s';
 		$path = dirname(__FILE__) .'/wordpress';
 		$newpath = dirname(__FILE__);
 		FolderCopy::copyFolder($path, $newpath);
 
-		echo 'wordpress files setup';
+		echo '<li>wordpress files setup, now removing extra files</li>';
 		$command = "rm -r ".$path."*";
 		system($command);  
 		unlink('wp.zip');
-		echo 'get salt<pre>';
+		echo '<li> getting salt for security</li>';
 		$salts=file_get_contents('https://api.wordpress.org/secret-key/1.1/salt/');
 		$salts=explode("\n",$salts);
-		print_r($salts);
-		echo 'writing wp-config file';
+		
+		echo '<li>writting wp-config file</li>';
 		
 			$configFile = file(ABSPATH . 'wp-config-sample.php');
 						
@@ -5857,7 +5863,6 @@ switch($step) {
 						fwrite($handle, str_replace('wp_', $prefix, $line));
 						break;
 					default:
-						echo "def:=> $line_num<br>";
 						if($line_num=='44')
 						{
 							fwrite($handle, $salts[0]."\n");
@@ -5897,9 +5902,57 @@ switch($step) {
 			}
 			fclose($handle);
 			chmod(ABSPATH . 'wp-config.php', 0666);
+			echo '<li>Creating .htaccess file</li>';
+				//now write a .htaccess file as well
+		$htaccess="
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+
+# END WordPress";
+		file_put_contents(ABSPATH .'.htaccess',$htaccess);
+		
+		// now setup the database stuff..
+		
+		/**
+		 * We are installing WordPress.
+		 *
+		 * @since 1.5.1
+		 * @var bool
+		 */
+		 echo '<li>Now Setting up WordPress</li>';
+		define( 'WP_INSTALLING', true );
+		$url = (!empty($_SERVER['HTTPS'])) ? "https://".$_SERVER['SERVER_NAME'].$_SERVER['REQUEST_URI'] : "http://".$_SERVER['SERVER_NAME'].$_SERVER['REQUEST_URI'];
+		$parse_url=parse_url($url); //
+		define( 'WP_SITEURL', $parse_url['scheme'].'://'.$parse_url['host'].dirname($parse_url['path']) );
+
+		/** Load WordPress Bootstrap */
+		require_once( dirname( __FILE__ ) . '/wp-load.php' );
+
+		/** Load WordPress Administration Upgrade API */
+		require_once( dirname( __FILE__ ) . '/wp-admin/includes/upgrade.php' );
+
+		/** Load wpdb */
+		require_once(dirname(__FILE__) . '/wp-includes/wp-db.php');
+		
+		$result = wp_install($sitename, $admin_user, $admin_email, $public, '', $admin_pass);
+		//now setup permalinks
+		echo '<li>Now Setting up Permalinks to /%postname%</li>';
+		update_option( 'uploads_use_yearmonth_folders', 0 );
+		update_option( 'permalink_structure', '/%postname%' );
+		flush_rewrite_rules();
 		}
+		
+		echo '</ul><p><strong>Setup Completed.</strong></p>';
 		//next three lines are for testing setup
 		$path = dirname(__FILE__) .'/a';
 		$command = "rm -r ".$path."*";
 		system($command);  
+		
+	
 		//unlink('installwp.php'); //at the end remove ur own self
